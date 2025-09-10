@@ -91,7 +91,7 @@ From `compute_timing_stats` and `all_stats`
 - `cv_julian_min` *(all_years only)*  
   Coefficient of variation of Julian dates of annual minima.  
 - `cv_julian_max` *(all_years only)*  
-  Coefficient of variation of Julian dates of annual maxima.  
+  Coefficient of variation of Julian dates of annual maxima.
 
 ---
 
@@ -115,7 +115,35 @@ From `compute_baseflow_index`
 
 ---
 
+### 9. **Colwell Predictability Metrics**
+From `compute_colwell_stats`
+
+- `colwell_constancy`  
+  Measure of uniformity in daily flow.  
+- `colwell_contingency`  
+  Measure of seasonal predictability.  
+- `colwell_predictability`  
+  Sum of constancy and contingency, overall flow predictability.  
+
+---
+
+## 🌟 Magnificent 7 Indicators (Optional Function)
+The **Magnificent 7 (Mag7)** metrics are computed by `all_stats()` and represent key annual hydrologic characteristics. These are optional but recommended for hydrologic assessments.
+
+| Metric | Column Name | Description |
+|--------|------------|-------------|
+| Mean daily flow | `mag_mean` | Average daily flow for the water year. |
+| High flow | `mag_high` | 90th percentile daily flow. |
+| Low flow | `mag_low` | 10th percentile daily flow. |
+| Skewness | `mag_skew` | Skewness of daily flows (unbiased). |
+| Coefficient of variation | `cv_daily` / `cv_annual` | Measures intra-annual and inter-annual variability of flows. |
+| Timing of annual maximum | `julian_max` | Julian day of annual maximum flow. |
+| Colwell Predictability | `colwell_constancy`, `colwell_contingency`, `colwell_predictability` | Entropy-based metrics describing flow regime. |
+
+---
+
 ## 📦 Output
+
 - Statistics are computed **per water year** and aggregated into an `all_years` summary.  
 - `cv_julian_min` and `cv_julian_max` appear **only in the all_years row**.  
 - Output is returned as a `pandas.DataFrame` and can be saved to CSV via `.save_stats()`.

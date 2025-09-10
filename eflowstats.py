@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
+from scipy.stats import skew
 
 # import computation functions from submodules
-from stats_magnificent7 import compute_magnificent7
 from stats_monthly import compute_monthly_stats
 from stats_extremes import compute_extreme_stats
 from stats_pulses import compute_pulse_stats, compute_pulse_rate_stats
@@ -10,6 +10,7 @@ from stats_rates import compute_rise_fall_stats
 from stats_timing import compute_timing_stats
 from stats_variability import compute_variability_stats
 from stats_baseflow import compute_baseflow_index
+from stats_colwell import compute_colwell_stats
 
 
 class EflowStats:
@@ -124,13 +125,18 @@ class EflowStats:
             else:
                 print(f"   Missing date range: {start} → {end}")
 
-
     def magnificent_seven(self):
         """
         Compute the 'Magnificent Seven' hydrologic indicators.
 
-        These include mean daily flow, high-flow quantile (90th percentile),
-        and low-flow quantile (10th percentile), summarized per water year.
+        These include:
+        - Mean daily flow
+        - High-flow quantile (90th percentile)
+        - Low-flow quantile (10th percentile)
+        - Skewness of daily flows
+        - Intra-annual coefficient of variation (CV)
+        - Julian day of annual maximum flow
+        - Colwell predictability metrics (constancy, contingency, predictability)
 
         Returns
         -------
@@ -144,15 +150,47 @@ class EflowStats:
 
         results = []
         for wy, g in df.groupby("water_year"):
-            stats = compute_magnificent7(g["q"].values)
+            stats = {}
+
+            # --- Core Magnificent 7 metrics ---
+            stats["mag_mean"] = g["q"].mean()
+            stats["mag_high"] = g["q"].quantile(0.9)
+            stats["mag_low"] = g["q"].quantile(0.1)
+            stats["mag_skew"] = skew(g["q"], bias=False)
+
+            # --- CV ---
+            stats.update(compute_variability_stats(g))
+
+            # --- Timing of max flow ---
+            timing_stats = compute_timing_stats(g)
+            stats["julian_max"] = timing_stats.get("julian_max", None)
+
+            # --- Colwell metrics ---
+            stats.update(compute_colwell_stats(g))
+
             stats["water_year"] = wy
             results.append(stats)
 
+        # --- Aggregate across all years ---
         if results:
-            all_years = compute_magnificent7(df["q"].values)
-            all_years["water_year"] = "all_years"
-            results.insert(0, all_years)
+            all_stats = {}
 
+            all_stats["mag_mean"] = df["q"].mean()
+            all_stats["mag_high"] = df["q"].quantile(0.9)
+            all_stats["mag_low"] = df["q"].quantile(0.1)
+            all_stats["mag_skew"] = skew(df["q"], bias=False)
+
+            all_stats.update(compute_variability_stats(df))
+
+            timing_stats_all = compute_timing_stats(df)
+            all_stats["julian_max"] = timing_stats_all.get("julian_max", None)
+
+            all_stats.update(compute_colwell_stats(df))
+
+            all_stats["water_year"] = "all_years"
+            results.insert(0, all_stats)
+
+        # --- Format DataFrame ---
         df_out = pd.DataFrame(results)
         cols = ["water_year"] + [c for c in df_out.columns if c != "water_year"]
         df_out = df_out[cols]
@@ -164,7 +202,7 @@ class EflowStats:
         Compute extended flow statistics for each water year and overall.
 
         Includes:
-        - Magnificent 7 core indicators (mean, 90th, 10th percentile)
+        - Magnificent 7 core indicators (mean, 90th, 10th percentile, skewness)
         - Monthly means/medians
         - Annual extreme magnitudes (1, 3, 7, 30, 90 day)
         - Pulse frequencies/durations (high/low)
@@ -173,6 +211,7 @@ class EflowStats:
         - Timing of extremes (Julian dates of min/max, center of timing)
         - Variability (coefficient of variation, standard deviation)
         - Baseflow index
+        - Colwell predictability metrics (constancy, contingency, predictability)
 
         Returns
         -------
@@ -191,6 +230,7 @@ class EflowStats:
             stats["mag_mean"] = g["q"].mean()
             stats["mag_high"] = g["q"].quantile(0.9)
             stats["mag_low"] = g["q"].quantile(0.1)
+            stats["mag_skew"] = skew(g["q"], bias=False)
 
             # --- Monthly stats ---
             stats.update(compute_monthly_stats(g))
@@ -222,6 +262,9 @@ class EflowStats:
             # --- Baseflow ---
             stats.update(compute_baseflow_index(g))
 
+            # --- Colwell ---
+            stats.update(compute_colwell_stats(g))
+
             stats["water_year"] = wy
             results.append(stats)
 
@@ -246,6 +289,9 @@ class EflowStats:
             stats_all.update(compute_timing_stats(df_all))
             stats_all.update(compute_variability_stats(df_all))
             stats_all.update(compute_baseflow_index(df_all))
+            stats_all.update(compute_colwell_stats(df_all))
+
+            stats_all["mag_skew"] = skew(df_all["q"], bias=False)
 
             julian_max_by_year = [s["julian_max"] for s in results if "julian_max" in s]
             julian_min_by_year = [s["julian_min"] for s in results if "julian_min" in s]
