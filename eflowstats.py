@@ -5,23 +5,46 @@ import numpy as np
 from stats_magnificent7 import compute_magnificent7
 from stats_monthly import compute_monthly_stats
 from stats_extremes import compute_extreme_stats
-from stats_pulses import compute_pulse_stats
+from stats_pulses import compute_pulse_stats, compute_pulse_rate_stats
 from stats_rates import compute_rise_fall_stats
 from stats_timing import compute_timing_stats
+from stats_variability import compute_variability_stats
+from stats_baseflow import compute_baseflow_index
 
 
 class EflowStats:
+    """
+    Compute environmental flow statistics from daily streamflow records.
+
+    This class ingests a CSV file containing daily streamflow data and computes a
+    wide range of hydrologic indices, including monthly summaries, annual extremes,
+    flow variability, baseflow, and event-based metrics such as pulses and rise/fall rates.
+
+    Parameters
+    ----------
+    infile : str
+        Path to input CSV with at least two columns:
+        - 'datetime' : datetime-like values
+        - 'q' : daily streamflow values (numeric)
+    start_month : int, optional
+        First month of the water year (default is 10 = October).
+    exclude_ranges : list of tuple of (str or datetime, str or datetime), optional
+        List of (start_date, end_date) ranges to exclude from analysis.
+        Dates are inclusive. Default is None.
+
+    Attributes
+    ----------
+    infile : str
+        Path to input file.
+    start_month : int
+        Water year starting month.
+    exclude_ranges : list
+        List of date ranges excluded from analysis.
+    df : pandas.DataFrame
+        Cleaned input data with normalized datetime column.
+    """
+
     def __init__(self, infile, start_month: int = 10, exclude_ranges=None):
-        """
-        Parameters
-        ----------
-        infile : str
-            Path to input CSV with columns: datetime, q
-        start_month : int
-            Start month of water year (default: 10 = October)
-        exclude_ranges : list of tuples
-            [(start_date, end_date), ...] to exclude from analysis
-        """
         self.infile = infile
         self.start_month = start_month
         self.exclude_ranges = exclude_ranges or []
@@ -105,7 +128,16 @@ class EflowStats:
     def magnificent_seven(self):
         """
         Compute the 'Magnificent Seven' hydrologic indicators.
-        Returns DataFrame of stats per year and 'all_years'.
+
+        These include mean daily flow, high-flow quantile (90th percentile),
+        and low-flow quantile (10th percentile), summarized per water year.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing:
+            - 'water_year' : int or 'all_years'
+            - Magnificent 7 flow statistics
         """
         df = self._apply_exclusions(self.df)
         df, kept_years, excluded = self._check_completeness(df)
@@ -130,12 +162,23 @@ class EflowStats:
     def all_stats(self):
         """
         Compute extended flow statistics for each water year and overall.
+
         Includes:
+        - Magnificent 7 core indicators (mean, 90th, 10th percentile)
         - Monthly means/medians
         - Annual extreme magnitudes (1, 3, 7, 30, 90 day)
         - Pulse frequencies/durations (high/low)
-        - Rise/Fall rates and reversals
-        - Timing (Julian dates of min/max, center of timing)
+        - Average rise/fall rates during high and low pulses
+        - General rise/fall rates and reversals
+        - Timing of extremes (Julian dates of min/max, center of timing)
+        - Variability (coefficient of variation, standard deviation)
+        - Baseflow index
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame with one row per water year plus an aggregated "all_years" row.
+            Columns include water_year and all computed hydrologic statistics.
         """
         df = self._apply_exclusions(self.df)
         df, kept_years, excluded = self._check_completeness(df)
@@ -144,6 +187,11 @@ class EflowStats:
         for wy, g in df.groupby("water_year"):
             stats = {}
 
+            # --- Magnificent Seven core metrics ---
+            stats["mag_mean"] = g["q"].mean()
+            stats["mag_high"] = g["q"].quantile(0.9)
+            stats["mag_low"] = g["q"].quantile(0.1)
+
             # --- Monthly stats ---
             stats.update(compute_monthly_stats(g))
 
@@ -151,13 +199,28 @@ class EflowStats:
             stats.update(compute_extreme_stats(g))
 
             # --- Pulses ---
-            stats.update(compute_pulse_stats(g))
+            pulse_stats = compute_pulse_stats(g)
+            stats.update(pulse_stats)
+
+            # --- Pulse rise/fall rates ---
+            pulse_rate_stats = compute_pulse_rate_stats(
+                g,
+                high_thresh=pulse_stats["high_thresh_used"],
+                low_thresh=pulse_stats["low_thresh_used"]
+            )
+            stats.update(pulse_rate_stats)
 
             # --- Rise/Fall rates ---
             stats.update(compute_rise_fall_stats(g))
 
             # --- Timing ---
             stats.update(compute_timing_stats(g))
+
+            # --- Variability ---
+            stats.update(compute_variability_stats(g))
+
+            # --- Baseflow ---
+            stats.update(compute_baseflow_index(g))
 
             stats["water_year"] = wy
             results.append(stats)
@@ -168,9 +231,33 @@ class EflowStats:
             stats_all = {}
             stats_all.update(compute_monthly_stats(df_all))
             stats_all.update(compute_extreme_stats(df_all))
-            stats_all.update(compute_pulse_stats(df_all))
+
+            pulse_stats_all = compute_pulse_stats(df_all)
+            stats_all.update(pulse_stats_all)
+
+            pulse_rate_stats_all = compute_pulse_rate_stats(
+                df_all,
+                high_thresh=pulse_stats_all["high_thresh_used"],
+                low_thresh=pulse_stats_all["low_thresh_used"]
+            )
+            stats_all.update(pulse_rate_stats_all)
+
             stats_all.update(compute_rise_fall_stats(df_all))
             stats_all.update(compute_timing_stats(df_all))
+            stats_all.update(compute_variability_stats(df_all))
+            stats_all.update(compute_baseflow_index(df_all))
+
+            julian_max_by_year = [s["julian_max"] for s in results if "julian_max" in s]
+            julian_min_by_year = [s["julian_min"] for s in results if "julian_min" in s]
+            if len(julian_max_by_year) > 1:
+                stats_all["cv_julian_max"] = np.std(julian_max_by_year, ddof=1) / np.mean(julian_max_by_year)
+            else:
+                stats_all["cv_julian_max"] = np.nan
+            if len(julian_min_by_year) > 1:
+                stats_all["cv_julian_min"] = np.std(julian_min_by_year, ddof=1) / np.mean(julian_min_by_year)
+            else:
+                stats_all["cv_julian_min"] = np.nan
+
             stats_all["water_year"] = "all_years"
             results.insert(0, stats_all)
 
@@ -184,6 +271,21 @@ class EflowStats:
 
 
     def save_stats(self, df, outfile):
+        """
+        Save computed statistics to CSV.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+           DataFrame of hydrologic statistics (e.g., from all_stats()).
+        outfile : str
+           Path to output CSV file.
+
+        Returns
+        -------
+        pandas.DataFrame
+           The same DataFrame passed in, for chaining.
+        """
         df.to_csv(outfile, index=False)
         print(f"\n✅ Stats saved to {outfile}")
         return df
