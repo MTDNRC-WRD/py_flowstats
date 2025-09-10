@@ -39,7 +39,7 @@ def compute_rise_fall_stats(df):
     reversals = np.sum(signs[1:] * signs[:-1] < 0)
 
     return {
-        "rise_rate": rise_rate,
-        "fall_rate": fall_rate,
+        "mean_rise_rate": rise_rate,
+        "mean_fall_rate": fall_rate,
         "reversals": reversals,
     }

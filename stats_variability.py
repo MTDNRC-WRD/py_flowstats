@@ -2,30 +2,40 @@ import pandas as pd
 import numpy as np
 
 
-def compute_variability_stats(df):
+def compute_variability_stats(series: pd.Series) -> dict:
     """
-    Compute variability metrics:
-    - Coefficient of inter-annual variation (std/mean of annual mean flows)
-    - Standard deviation of daily streamflow (period-of-record)
+    Variability statistics for daily streamflow.
 
-    Expects columns: ['datetime', 'q']
+    Parameters
+    ----------
+    series : pd.Series
+        Daily streamflow values.
+
+    Returns
+    -------
+    dict
+        {
+            "std_daily": float,
+            "cv_daily": float,
+            "cv_interannual": float
+        }
     """
-    df = df.copy()
-    df["year"] = df["datetime"].dt.year
+    values = series.values
+    mean_daily = np.nanmean(values)
+    std_daily = np.nanstd(values, ddof=1)
 
-    # Annual mean flows
-    annual_means = df.groupby("year")["q"].mean()
+    # CV of daily values
+    cv_daily = std_daily / mean_daily if mean_daily != 0 else np.nan
 
-    # CV of inter-annual variation
-    if len(annual_means) > 1:
-        cv_interannual = annual_means.std() / annual_means.mean()
-    else:
-        cv_interannual = np.nan
-
-    # Std dev of daily flows (all years pooled)
-    std_daily = df["q"].std()
+    # Interannual CV: std of annual means / mean of annual means
+    df = series.to_frame("q").copy()
+    df["year"] = df.index.year
+    annual_means = df.groupby("year")["q"].mean().values
+    mean_annual = np.nanmean(annual_means)
+    cv_interannual = np.nanstd(annual_means, ddof=1) / mean_annual if mean_annual != 0 else np.nan
 
     return {
-        "cv_interannual": cv_interannual,
         "std_daily": std_daily,
+        "cv_daily": cv_daily,
+        "cv_annual": cv_interannual,
     }

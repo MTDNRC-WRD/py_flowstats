@@ -202,7 +202,7 @@ class EflowStats:
         Compute extended flow statistics for each water year and overall.
 
         Includes:
-        - Magnificent 7 core indicators (mean, 90th, 10th percentile, skewness)
+        - Magnificent 7 core indicators (mean, 90th, 10th percentile, skew, CV, timing, Colwell)
         - Monthly means/medians
         - Annual extreme magnitudes (1, 3, 7, 30, 90 day)
         - Pulse frequencies/durations (high/low)
@@ -211,7 +211,6 @@ class EflowStats:
         - Timing of extremes (Julian dates of min/max, center of timing)
         - Variability (coefficient of variation, standard deviation)
         - Baseflow index
-        - Colwell predictability metrics (constancy, contingency, predictability)
 
         Returns
         -------
@@ -251,7 +250,8 @@ class EflowStats:
             stats.update(pulse_rate_stats)
 
             # --- Rise/Fall rates ---
-            stats.update(compute_rise_fall_stats(g))
+            rise_fall_stats = compute_rise_fall_stats(g)
+            stats.update(rise_fall_stats)
 
             # --- Timing ---
             stats.update(compute_timing_stats(g))
@@ -272,12 +272,24 @@ class EflowStats:
         if results:
             df_all = df.copy()
             stats_all = {}
+
+            # --- Magnificent Seven core metrics ---
+            stats_all["mag_mean"] = df_all["q"].mean()
+            stats_all["mag_high"] = df_all["q"].quantile(0.9)
+            stats_all["mag_low"] = df_all["q"].quantile(0.1)
+            stats_all["mag_skew"] = skew(df_all["q"], bias=False)
+
+            # --- Monthly stats ---
             stats_all.update(compute_monthly_stats(df_all))
+
+            # --- Extreme stats ---
             stats_all.update(compute_extreme_stats(df_all))
 
+            # --- Pulse stats ---
             pulse_stats_all = compute_pulse_stats(df_all)
             stats_all.update(pulse_stats_all)
 
+            # --- Pulse rise/fall rates ---
             pulse_rate_stats_all = compute_pulse_rate_stats(
                 df_all,
                 high_thresh=pulse_stats_all["high_thresh_used"],
@@ -285,24 +297,28 @@ class EflowStats:
             )
             stats_all.update(pulse_rate_stats_all)
 
-            stats_all.update(compute_rise_fall_stats(df_all))
+            # --- Rise/Fall rates ---
+            rise_fall_stats_all = compute_rise_fall_stats(df_all)
+            stats_all.update(rise_fall_stats_all)
+
+            # --- Timing stats ---
             stats_all.update(compute_timing_stats(df_all))
+
+            # --- Variability stats ---
             stats_all.update(compute_variability_stats(df_all))
+
+            # --- Baseflow index ---
             stats_all.update(compute_baseflow_index(df_all))
+
+            # --- Colwell stats ---
             stats_all.update(compute_colwell_stats(df_all))
 
-            stats_all["mag_skew"] = skew(df_all["q"], bias=False)
-
-            julian_max_by_year = [s["julian_max"] for s in results if "julian_max" in s]
-            julian_min_by_year = [s["julian_min"] for s in results if "julian_min" in s]
-            if len(julian_max_by_year) > 1:
-                stats_all["cv_julian_max"] = np.std(julian_max_by_year, ddof=1) / np.mean(julian_max_by_year)
-            else:
-                stats_all["cv_julian_max"] = np.nan
-            if len(julian_min_by_year) > 1:
-                stats_all["cv_julian_min"] = np.std(julian_min_by_year, ddof=1) / np.mean(julian_min_by_year)
-            else:
-                stats_all["cv_julian_min"] = np.nan
+            # --- Normalize count-type metrics per water year ---
+            COUNT_METRICS = ["high_pulse_count", "low_pulse_count", "reversals"]
+            n_years = len(kept_years)
+            for metric in COUNT_METRICS:
+                if metric in stats_all:
+                    stats_all[metric] /= n_years
 
             stats_all["water_year"] = "all_years"
             results.insert(0, stats_all)

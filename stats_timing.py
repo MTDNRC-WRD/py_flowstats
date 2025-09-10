@@ -37,7 +37,7 @@ def compute_timing_stats(df):
         center_of_timing = None
 
     return {
-        "doy_max": doy_max,
-        "doy_min": doy_min,
+        "julian_max": doy_max,
+        "julian_min": doy_min,
         "center_of_timing": center_of_timing,
     }

@@ -3,8 +3,8 @@ from eflowstats import EflowStats  # assumes eflowstats.py is in the same folder
 
 def main():
     # === CONFIG ===
-    infile = r"K:\WRD\WMB_GIS\Saba\Classification_Gauges\06037500.csv"   # input CSV (datetime,q)
-    outfile_m7 = r"output\06037500.csv"
+    infile = r"input\06037500.csv"   # input CSV (datetime,q)
+    outfile_m7 = r"output\06037500_m7.csv"
     outfile_all = r"output\06037500_allstats.csv"
     start_month = 10  # October = start of water year
 
@@ -13,14 +13,14 @@ def main():
     # --- Initialize ---
     stats = EflowStats(infile, start_month=start_month)
 
-    # --- Magnificent Seven ---
-    print("\n--- Magnificent Seven ---")
-    try:
-        magn7 = stats.magnificent_seven()
-        stats.save_stats(magn7, outfile_m7)
-        print(magn7.head())
-    except Exception as e:
-        print(f"Error running magnificent_seven(): {e}")
+    # # --- Magnificent Seven ---
+    # print("\n--- Magnificent Seven ---")
+    # try:
+    #     magn7 = stats.magnificent_seven()
+    #     stats.save_stats(magn7, outfile_m7)
+    #     print(magn7.head())
+    # except Exception as e:
+    #     print(f"Error running magnificent_seven(): {e}")
 
     # --- All Stats ---
     print("\n--- All Stats ---")
