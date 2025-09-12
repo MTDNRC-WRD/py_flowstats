@@ -41,3 +41,62 @@ def compute_timing_stats(df):
         "julian_min": doy_min,
         "center_of_timing": center_of_timing,
     }
+
+
+def compute_phase_amplitude(df: pd.DataFrame) -> dict:
+    """
+    Note: this has been depreciated, see compute_mag7_stats instead
+
+    Compute phase and amplitude of seasonal streamflow using harmonic regression.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must have a datetime index and a 'q' column of daily streamflow.
+
+    Returns
+    -------
+    dict
+        {
+            "phase": float,       # peak timing (day of year, 1–366)
+            "amplitude": float    # strength of seasonal cycle
+        }
+    """
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise ValueError("DataFrame index must be datetime-like")
+
+    # Drop NaNs in discharge
+    series = df["q"].dropna()
+    if series.empty:
+        return {"phase": np.nan, "amplitude": np.nan}
+
+    # Day of year (1–366), convert to radians
+    doy = series.index.dayofyear.values
+    radians = 2 * np.pi * doy / 365.25
+
+    # Response variable
+    y = series.values
+
+    # Harmonic regression design matrix
+    X = np.column_stack([
+        np.cos(radians),
+        np.sin(radians)
+    ])
+
+    # Fit regression (least squares)
+    beta, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+    beta_cos, beta_sin = beta
+
+    # Amplitude (magnitude of seasonal signal)
+    amplitude = np.sqrt(beta_cos**2 + beta_sin**2)
+
+    # Phase (peak timing) in radians -> day of year
+    phase_rad = np.arctan2(beta_sin, beta_cos)
+    if phase_rad < 0:
+        phase_rad += 2 * np.pi
+    phase_doy = phase_rad * 365.25 / (2 * np.pi)
+
+    return {
+        "phase": float(phase_doy),
+        "amplitude": float(amplitude),
+    }
