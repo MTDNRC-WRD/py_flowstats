@@ -91,14 +91,18 @@ From `compute_timing_stats` and `all_stats`
 - `cv_julian_min` *(all_years only)*  
   Coefficient of variation of Julian dates of annual minima.  
 - `cv_julian_max` *(all_years only)*  
-  Coefficient of variation of Julian dates of annual maxima.
+  Coefficient of variation of Julian dates of annual maxima.  
+- `phase (depreciated, see Mag7)`  
+  Flow-weighted timing angle of the hydrograph (radians or degrees).  
+- `amplitude (depreciated, see Mag7)`  
+  Magnitude of seasonal variation in daily flow.
 
 ---
 
 ### 7. **Variability Statistics**
 From `compute_variability_stats`
 
-- `std_dev`  
+- `std_daily`  
   Standard deviation of daily streamflow.  
 - `cv_daily`  
   Coefficient of variation of daily streamflow (std / mean).  
@@ -110,7 +114,7 @@ From `compute_variability_stats`
 ### 8. **Baseflow Statistics**
 From `compute_baseflow_index`
 
-- `baseflow_index`  
+- `bfi`  
   Ratio of baseflow to total flow, estimated via a recursive digital filter.
 
 ---
@@ -123,27 +127,53 @@ From `compute_colwell_stats`
 - `colwell_contingency`  
   Measure of seasonal predictability.  
 - `colwell_predictability`  
-  Sum of constancy and contingency, overall flow predictability.  
+  Sum of constancy and contingency, overall flow predictability.
 
 ---
 
-## 🌟 Magnificent 7 Indicators (Optional Function)
-The **Magnificent 7 (Mag7)** metrics are computed by `all_stats()` and represent key annual hydrologic characteristics. These are optional but recommended for hydrologic assessments.
+## 🌟 Magnificent 7 Indicators (Mag7)
+The **Magnificent 7 (Mag7)** metrics are computed by `all_stats()` and represent key annual hydrologic characteristics.  
 
 | Metric | Column Name | Description |
 |--------|------------|-------------|
-| Mean daily flow | `mag_mean` | Average daily flow for the water year. |
-| High flow | `mag_high` | 90th percentile daily flow. |
-| Low flow | `mag_low` | 10th percentile daily flow. |
-| Skewness | `mag_skew` | Skewness of daily flows (unbiased). |
-| Coefficient of variation | `cv_daily` / `cv_annual` | Measures intra-annual and inter-annual variability of flows. |
-| Timing of annual maximum | `julian_max` | Julian day of annual maximum flow. |
-| Colwell Predictability | `colwell_constancy`, `colwell_contingency`, `colwell_predictability` | Entropy-based metrics describing flow regime. |
+| Mean flow (λ₁) | `lam1` | Average daily flow for the water year. |
+| L-CV (τ₂) | `tau2` | L-moment coefficient of variation. |
+| L-skew (τ₃) | `tau3` | L-moment skewness. |
+| L-kurtosis (τ₄) | `tau4` | L-moment kurtosis. |
+| AR(1) coefficient | `ar1` | Lag-1 autocorrelation of daily flows. |
+| Amplitude | `amplitude` | Magnitude of seasonal variation. |
+| Phase | `phase` | Timing of peak seasonal flow (radians/degrees). |
+
+---
+
+## 🔹 HIAP (Henriksen et al., 2006) Statistics
+The **HIAP_stats** function computes a suite of hydrologic indices based on Henriksen et al. 2006 methodology. The naming conventions align with `py_flowstats` for consistency.  
+
+| HIAP Stat | Existing in py_flowstats? | Column Name | Notes |
+|------------|--------------------------|-------------|-------|
+| Ma1 | Yes | `mag_mean` | Mean of daily flows over the entire record. |
+| Ma3 | Partially | `cv_annual` | Mean (or median) of per-year CVs of daily flows. |
+| Ml17 | Partially | `min_7day_ratio` | Ratio of 7-day minimum to mean annual flow per year; aggregate mean/median. |
+| Fl1 | Yes | `low_pulse_count` | Low pulse frequency (≤ 25th percentile). |
+| Fh1 | Yes | `high_pulse_count` | High pulse frequency (≥ 75th percentile). |
+| Fh5 | Yes | `fh5` | Flood frequency above median flow. |
+| Ta2 | Yes | `colwell_predictability` | Predictability metric from Colwell analysis. |
+| Ta3 | Yes | `ta3` | Seasonal predictability of flooding (max flood days / total flood days). |
+| Tl2 | Yes | `cv_julian_min` | Variability in timing of annual minima. |
+| Th1 | Yes | `julian_max` | Timing of annual maximum flow. |
+| Phase | Yes | `phase` | Flow-weighted timing of hydrograph. |
+| Dh2 | Yes | `max_3day_mean` | Annual maximum 3-day moving average; aggregate mean/median. |
+
+**Notes:**
+
+- For `Ma3`, `Ml17`, and `Dh2`, HIAP_stats computes per-year statistics and then aggregates using **mean or median** based on user preference.  
+- Column names were chosen to match `py_flowstats` naming conventions where possible (`mag_mean`, `cv_annual`, `julian_max`, etc.).  
+- HIAP_stats returns a `pandas.DataFrame` formatted identically to `all_stats()`, with per-water-year rows and an aggregated `all_years` row.
 
 ---
 
 ## 📦 Output
 
-- Statistics are computed **per water year** and aggregated into an `all_years` summary.  
-- `cv_julian_min` and `cv_julian_max` appear **only in the all_years row**.  
-- Output is returned as a `pandas.DataFrame` and can be saved to CSV via `.save_stats()`.
+- All statistics (Mag7 and HIAP) are computed **per water year** and summarized into an `all_years` row.  
+- Output is returned as a `pandas.DataFrame` ready for further analysis or CSV export.
+

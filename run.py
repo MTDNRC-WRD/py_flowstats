@@ -24,14 +24,25 @@ def main():
 
     # --- All Stats ---
     print("\n--- All Stats ---")
-    try:
-        allstats = stats.all_stats()
-        stats.save_stats(allstats, outfile_all)
-        # show a preview with only first few columns for readability
-        print(allstats.iloc[:, :8].head())
-        print(f"\nTotal metrics computed: {allstats.shape[1] - 1}")  # exclude water_year
-    except Exception as e:
-        print(f"Error running all_stats(): {e}")
+    # try:
+    #     allstats = stats.all_stats()
+    #     stats.save_stats(allstats, outfile_all)
+    #     # show a preview with only first few columns for readability
+    #     print(allstats.iloc[:, :8].head())
+    #     print(f"\nTotal metrics computed: {allstats.shape[1] - 1}")  # exclude water_year
+    # except Exception as e:
+    #     print(f"Error running all_stats(): {e}")
+
+
+    allstats = stats.all_stats()
+    stats.save_stats(allstats, outfile_all)
+    # show a preview with only first few columns for readability
+    print(allstats.iloc[:, :8].head())
+    print(f"\nTotal metrics computed: {allstats.shape[1] - 1}")  # exclude water_year
+
+
+
+
 
     print("\n=== Done ===")
 

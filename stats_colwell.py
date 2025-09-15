@@ -1,76 +1,107 @@
 import numpy as np
 import pandas as pd
 
-def compute_colwell_stats(df, datetime_col="datetime", flow_col="q",
-                  n_time_bins=12, n_flow_bins=10):
+import numpy as np
+import pandas as pd
+
+def compute_colwell_stats(df: pd.DataFrame, datetime_col="datetime", flow_col="q",
+                          n_time_bins=365, n_flow_bins=11) -> dict:
     """
-        Compute Colwell's Constancy, Contingency, and Predictability (Colwell 1974).
+    Compute Colwell's Constancy (TA1), Predictability (TA2), and Seasonal Predictability of Flooding (TA3)
+    from daily flows. Automatically computes 1.67-year flood threshold for TA3.
 
-        Parameters
-        ----------
-        df : pd.DataFrame
-            DataFrame with datetime and flow columns.
-        datetime_col : str, default "date"
-            Column name for datetime values.
-        flow_col : str, default "discharge"
-            Column name for flow values.
-        n_time_bins : int, default 12
-            Number of time bins (e.g., 12 for months, 52 for weeks).
-        n_flow_bins : int, default 10
-            Number of flow bins (quantiles).
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with datetime and flow columns.
+    datetime_col : str
+        Column name for datetime values.
+    flow_col : str
+        Column name for flow values.
+    n_time_bins : int
+        Number of time bins (default 365 days, leap days removed).
+    n_flow_bins : int
+        Number of flow bins for Colwell matrix (default 11, log10 scaling).
 
-        Returns
-        -------
-        dict
-            Dictionary with keys:
-            - colwell_constancy
-            - colwell_contingency
-            - colwell_predictability
-        """
-
+    Returns
+    -------
+    dict
+        {
+            "colwell_constancy": float,
+            "colwell_contingency": float,
+            "colwell_predictability": float
+        }
+    """
     df = df.copy()
     df[datetime_col] = pd.to_datetime(df[datetime_col])
 
-    # --- Assign time bins dynamically ---
-    # evenly space the dates into n_time_bins
-    df["time_bin"] = pd.cut(df[datetime_col].dt.dayofyear,
-                            bins=n_time_bins,
-                            labels=False,
-                            include_lowest=True)
+    # --- Remove Feb 29th for consistent day-of-year ---
+    df = df[~((df[datetime_col].dt.month == 2) & (df[datetime_col].dt.day == 29))]
+    df["day"] = df.groupby(df[datetime_col].dt.year).cumcount() + 1
 
-    # --- Assign flow bins by quantiles ---
-    df["flow_bin"] = pd.qcut(df[flow_col],
-                             q=n_flow_bins,
-                             labels=False,
-                             duplicates="drop")
+    # --- Compute flow bins (log-scaled like EflowStats) ---
+    mean_flow = df[flow_col].mean()
+    log_mean_flow = np.log10(mean_flow)
+    df["log_flow"] = np.log10(df[flow_col])
+    break_pts = np.array([0.1] + list(np.arange(0.25, 2.26, 0.25))) * log_mean_flow
+    df["flow_bin"] = np.searchsorted(np.sort(break_pts), df["log_flow"], side="right")
 
-    # --- Build frequency matrix ---
-    freq_matrix = pd.crosstab(df["time_bin"], df["flow_bin"]).to_numpy()
-    total = freq_matrix.sum()
-    if total == 0:
+    # --- Colwell matrix ---
+    colwell_matrix = pd.crosstab(df["day"], df["flow_bin"]).to_numpy()
+    Z = colwell_matrix.sum()
+    if Z == 0:
         return {
             "colwell_constancy": np.nan,
             "colwell_contingency": np.nan,
             "colwell_predictability": np.nan,
         }
 
-    # --- Probability matrix ---
-    P = freq_matrix / total
-    row_sums = P.sum(axis=1, keepdims=True)
-    col_sums = P.sum(axis=0, keepdims=True)
+    # --- Row and column sums ---
+    XJ = colwell_matrix.sum(axis=1)
+    YI = colwell_matrix.sum(axis=0)
 
     # --- Entropies ---
-    H_total = -np.nansum(P * np.log(P + 1e-12))
-    H_rows = -np.nansum(row_sums * np.log(row_sums + 1e-12))
-    H_cols = -np.nansum(col_sums * np.log(col_sums + 1e-12))
+    def entropy(vals):
+        vals = vals[vals > 0]
+        probs = vals / vals.sum()
+        return -np.sum(probs * np.log10(probs))
+
+    HX = entropy(XJ)
+    HY = entropy(YI)
+    HXY = entropy(colwell_matrix.flatten())
+    HxY = HXY - HX
 
     # --- Colwell metrics ---
-    constancy = 1 - (H_cols / np.log(n_flow_bins))
-    contingency = (H_total - H_rows - H_cols) / np.log(n_time_bins)
-    predictability = constancy + contingency
+    colwell_constancy = 1 - (HY / np.log10(n_flow_bins))
+    colwell_predictability = 100 * (1 - HxY / np.log10(n_flow_bins))
+    colwell_contingency = colwell_predictability - colwell_constancy
+
+    # --- TA3: seasonal predictability of flooding ---
+    # Compute 1.67-year flood threshold from annual maxima
+    annual_max = df.groupby(df[datetime_col].dt.year)[flow_col].max()
+    if len(annual_max) > 0:
+        flood_threshold = np.percentile(annual_max, 100 * (1 - 1/1.67))
+    else:
+        flood_threshold = np.nan
+
+    df["flood_day"] = df[flow_col] > flood_threshold
+    df["month"] = df[datetime_col].dt.month
+
+    # 2-month bins like EflowStats: Oct-Nov, Dec-Jan, Feb-Mar, ...
+    bins = [(10, 11), (12, 1), (2, 3), (4, 5), (6, 7), (8, 9)]
+    flood_counts = []
+    for b in bins:
+        if b[0] > b[1]:
+            mask = df["month"].isin([b[0], b[1]])
+        else:
+            mask = df["month"].isin(b)
+        flood_counts.append(df.loc[mask, "flood_day"].sum())
+    total_flood_days = sum(flood_counts)
+    ta3 = max(flood_counts) / total_flood_days if total_flood_days > 0 else np.nan
 
     return {
-        "colwell_constancy": float(constancy),
-        "colwell_contingency": float(contingency),
-        "colwell_predictability": float(predictability),
+        "colwell_constancy": colwell_constancy,
+        "colwell_contingency": colwell_contingency,
+        "colwell_predictability": colwell_predictability,
+        "ta3": ta3
     }
