@@ -1,9 +1,6 @@
 import numpy as np
 import pandas as pd
 
-import numpy as np
-import pandas as pd
-
 def compute_colwell_stats(df: pd.DataFrame, datetime_col="datetime", flow_col="q",
                           n_time_bins=365, n_flow_bins=11) -> dict:
     """

@@ -37,4 +37,4 @@ if compiled_rows:
     compiled_file_path = os.path.join(OUTPUT_DIR, COMPILED_FILENAME)
     compiled_df.to_csv(compiled_file_path, index=False)
 
-print(f"All HIAP stats processed. Individual CSVs saved in '{OUTPUT_DIR}' and compiled CSV saved as '{COMPILED_FILENAME}'.")
+print(f"\nAll HIAP stats processed. Individual CSVs saved in '{OUTPUT_DIR}' and compiled CSV saved as '{COMPILED_FILENAME}'.")

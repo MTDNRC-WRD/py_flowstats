@@ -1,6 +1,10 @@
+import os.path
+
 import pandas as pd
 import numpy as np
 from scipy.stats import skew
+import warnings
+
 
 import stats_timing
 # import computation functions from submodules
@@ -54,13 +58,17 @@ class EflowStats:
         self.start_month = start_month
         self.exclude_ranges = exclude_ranges or []
         self.df = self._load_data()
+        warnings.simplefilter(action="ignore", category=FutureWarning)
 
     def _load_data(self):
         df = pd.read_csv(self.infile)
 
         # Normalize datetime
         if "datetime" not in df.columns:
-            raise ValueError("CSV must contain a 'datetime' column.")
+            # Take the first column and make it the datetime column
+            first_col = df.columns[0]
+            df = df.rename(columns={first_col: "datetime"})
+
         df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce").dt.tz_localize(None)
         df = df.dropna(subset=["datetime"])
 
@@ -71,6 +79,7 @@ class EflowStats:
         # Normalize to daily resolution (drop h:m:s)
         df["datetime"] = df["datetime"].dt.normalize()
         df = df.sort_values("datetime").reset_index(drop=True)
+        print(f"\n{os.path.basename(self.infile)}")
         return df
 
     def _water_year(self, dates):
@@ -88,35 +97,60 @@ class EflowStats:
     def _check_completeness(self, df):
         """
         Validate completeness of each water year.
-        Excludes years with missing dates or NaN q values.
+        - If exactly 1 day is missing, fill it with previous day's q value.
+        - Excludes years with >1 missing dates or NaN q values.
         Prints details of excluded years.
         """
         df = df.copy()
+
+        # Convert non-positive values to small positive number
+        df["q"] = df["q"].clip(lower=1e-6)
+
         df["water_year"] = self._water_year(df["datetime"])
         kept_years = []
         excluded = []
+
+        fixed_frames = []  # to collect repaired per-year data
 
         for wy, g in df.groupby("water_year"):
             start = pd.Timestamp(year=wy - 1, month=self.start_month, day=1)
             end = pd.Timestamp(year=wy, month=self.start_month, day=1) - pd.Timedelta(days=1)
 
             expected = pd.date_range(start, end, freq="D")
-            present = g["datetime"].unique()
-            missing = expected.difference(present)
+            g = g.set_index("datetime").reindex(expected)  # align to expected range
+            g.index.name = "datetime"
+
+            missing = g.index[g["q"].isna()]
             nan_q = g["q"].isna().sum()
 
-            if len(missing) > 0 or nan_q > 0:
-                print(f"\n⚠ Excluding incomplete water year {wy}:")
-                if len(missing) > 0:
-                    self._print_missing_ranges(missing)
-                if nan_q > 0:
-                    print(f"   Missing q values: {nan_q}")
+            if nan_q == 1:
+                # fill the single missing value from the previous day
+                g["q"] = g["q"].fillna(method="ffill")
+                kept_years.append(wy)
+                fixed_frames.append(g.reset_index().assign(water_year=wy))
+            elif nan_q > 1:
+                print(f"⚠ Excluding incomplete water year {wy}:")
+                self._print_missing_ranges(missing)
+                print(f"   Missing q values: {nan_q}")
                 excluded.append(wy)
             else:
                 kept_years.append(wy)
+                fixed_frames.append(g.reset_index().assign(water_year=wy))
 
-        df = df[df["water_year"].isin(kept_years)]
+        # Concatenate repaired kept years
+        if fixed_frames:
+            df = pd.concat(fixed_frames, ignore_index=True)
+        else:
+            df = pd.DataFrame(columns=df.columns)
+
         return df, kept_years, excluded
+
+    def export_timeseries(self):
+        """simply exports the cleaned timseries as a df for your convenience"""
+        df = self._apply_exclusions(self.df)
+        df, kept_years, excluded = self._check_completeness(df)
+        return df
+
 
     def _print_missing_ranges(self, missing_dates):
         """Pretty-print consecutive missing date ranges."""
