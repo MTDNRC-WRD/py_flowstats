@@ -7,7 +7,7 @@ CSV_PATH = 'timeseries/06169500.csv'
 CSV_OUTPUT = 'ts_normalized/06169500.csv'
 
 INPUT_FOLDER = 'timeseries'
-OUTPUT_FOLDER = 'ts_ann_flow_index_log_mean_7day'
+OUTPUT_FOLDER = 'ts_min_max_log_median_7day'
 
 
 def normalize(file_path, method, log=True, moving_average=False, annualize=False,
@@ -133,10 +133,10 @@ if __name__ == '__main__':
         for file_name in all_files:
             df_fill = normalize(
                 os.path.join(INPUT_FOLDER, file_name),
-                method='annual_flow_index',
+                method='min_max',
                 log=True,
                 annualize=True,
-                annualize_method='mean',
+                annualize_method='median',
                 water_year=True,
                 moving_average=True
             )
