@@ -22,7 +22,7 @@ RANDOM_STATE = 42
 # ===========================
 # FUNCTION TO PROCESS A FOLDER
 # ===========================
-def process_folder(input_folder, output_folder):
+def time_warp (input_folder, output_folder):
     print(f"\n=== Processing {input_folder} ===")
 
     # Collect all CSVs
@@ -113,6 +113,6 @@ if LOOP_MODE:
         subfolder_path = os.path.join(DATA_FOLDER, folder_name)
         if os.path.isdir(subfolder_path):
             out_subfolder = os.path.join(OUTPUT_FOLDER, folder_name)
-            process_folder(subfolder_path, out_subfolder)
+            time_warp(subfolder_path, out_subfolder)
 else:
-    process_folder(DATA_FOLDER, OUTPUT_FOLDER)
+    time_warp(DATA_FOLDER, OUTPUT_FOLDER)
