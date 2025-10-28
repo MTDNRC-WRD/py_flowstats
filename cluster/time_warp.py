@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm
+import matplotlib.dates as mdates
 from tslearn.clustering import TimeSeriesKMeans
 from tslearn.metrics import cdist_dtw
 from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
@@ -13,7 +14,6 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_har
 LOOP_MODE = True
 
 DATA_FOLDER = "norms"             # normalized data for clustering
-# RAW_TIMESERIES_DIR = "annualized" # folder with raw annualized timeseries
 OUTPUT_FOLDER = "output"
 MIN_CLUSTERS = 2
 MAX_CLUSTERS = 12
@@ -74,26 +74,32 @@ def plot_cluster_means(cluster_dfs, title, outfile):
         index_name = df.index.name.lower() if df.index.name else "doy"
 
         if index_name == "dowy":
+            # water year starts Oct 1 of prior year
             start_date = pd.Timestamp("1999-10-01")
         else:
+            # normal calendar year
             start_date = pd.Timestamp("2000-01-01")
 
         dt_index = pd.to_datetime(start_date + pd.to_timedelta(df.index - 1, unit="D"))
         df.index = dt_index
+        x_vals = df.index
 
         color = colors[i % len(colors)]  # use with custom hex codes
         # color = colors[i % len(colors)] if i < len(colors) else cmap(i)  # use with cmap
         num_sites = df.shape[1] - 1
 
         plt.plot(
-            df.index, df["cluster_mean"],
-            label=f"Cluster {cluster_num} ({num_sites})",
-            color=color, linewidth=2
+            x_vals,
+            df["cluster_mean"],
+            label=f"Cluster {cluster_num}: {num_sites}",
+            color=color,
+            linewidth=2
         )
 
-    plt.gca().xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%b'))
-    plt.gca().xaxis.set_major_locator(plt.matplotlib.dates.MonthLocator())
-    plt.xlabel("Month")
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+        plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
+        plt.xlabel("Month")
+
     plt.ylabel("Discharge (cluster mean)")
     plt.title(title)
     plt.legend()
@@ -158,19 +164,18 @@ def time_warp(input_folder, output_folder):
         print(f"Saved cluster assignments to {cluster_csv}")
 
         # === Aggregated cluster plots ===
-        for data_type, source_dir in [("Normalized", DATA_FOLDER)]:  # [("Normalized", DATA_FOLDER), ("Raw", RAW_TIMESERIES_DIR)]:
-            cluster_dfs = {}
-            for fname in os.listdir(source_dir):
-                if fname.endswith(".csv"):
-                    cluster_dfs = agg_timeseries(os.path.join(source_dir, fname), mapping_df, cluster_dfs)
-            cluster_dfs = mean_clusters(cluster_dfs)
+        cluster_dfs = {}
+        for fname in os.listdir(input_folder):
+            if fname.endswith(".csv"):
+                cluster_dfs = agg_timeseries(os.path.join(input_folder, fname), mapping_df, cluster_dfs)
+        cluster_dfs = mean_clusters(cluster_dfs)
 
-            out_plot = os.path.join(output_folder, f"{data_type.lower()}_cluster_means_k{k}.png")
-            plot_cluster_means(
-                cluster_dfs,
-                title=f"{data_type} Cluster Mean Hydrographs (k={k})",
-                outfile=out_plot,
-            )
+        out_plot = os.path.join(output_folder, f"dtw_clusters_k{k}.png")
+        plot_cluster_means(
+            cluster_dfs,
+            title=f"Cluster Mean Hydrographs (k={k})",
+            outfile=out_plot,
+        )
 
     # === Summary metric plots ===
     plt.figure(figsize=(15, 5))

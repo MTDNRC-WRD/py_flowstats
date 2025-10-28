@@ -7,7 +7,7 @@ CSV_PATH = 'timeseries/06169500.csv'
 CSV_OUTPUT = 'ts_normalized/06169500.csv'
 
 INPUT_FOLDER = 'timeseries'
-OUTPUT_FOLDER = 'ts_min_max_log_median_7day'
+OUTPUT_FOLDER = 'ts_zscore_log_median'
 
 
 def normalize(file_path, method, log=True, moving_average=False, annualize=False,
@@ -21,10 +21,11 @@ def normalize(file_path, method, log=True, moving_average=False, annualize=False
         Path to a CSV with at least two columns: datetime index and 'q' (flow).
     method : str
         Normalization method:
-        - 'min_max'          : Rescale values to [0, 1] using global min/max.
-        - 'mean_variance'    : Standardize by subtracting mean and dividing by std.
-        - 'flow_index'       : Divide by the mean of the entire timeseries (long-term mean).
-        - 'annual_flow_index': Divide each year by its annual mean (focuses on shape).
+            - 'min_max'          : Rescale values to [0, 1] using global min/max.
+            - 'mean_variance'    : Standardize by subtracting mean and dividing by population std (ddof=0).
+            - 'zscore'           : Standardize by subtracting mean and dividing by sample std (ddof=1).
+            - 'flow_index'       : Divide by mean of entire timeseries (long-term mean).
+            - 'annual_flow_index': Divide each year by its annual mean (focuses on shape).
     log : bool, default=True
         Apply log1p transform to flows before normalization (except for flow index methods,
         where log is applied afterward).
@@ -68,6 +69,11 @@ def normalize(file_path, method, log=True, moving_average=False, annualize=False
     elif method == 'mean_variance':
         mean_val = ts_df['q'].mean()
         std_val = ts_df['q'].std(ddof=0)
+        ts_df['q'] = (ts_df['q'] - mean_val) / std_val
+
+    elif method == 'z_score':
+        mean_val = ts_df['q'].mean()
+        std_val = ts_df['q'].std(ddof=1)
         ts_df['q'] = (ts_df['q'] - mean_val) / std_val
 
     elif method == 'flow_index':
@@ -133,12 +139,12 @@ if __name__ == '__main__':
         for file_name in all_files:
             df_fill = normalize(
                 os.path.join(INPUT_FOLDER, file_name),
-                method='min_max',
+                method='z_score',
                 log=True,
                 annualize=True,
                 annualize_method='median',
                 water_year=True,
-                moving_average=True
+                moving_average=False
             )
             print(f"\n{file_name}")
             if df_fill is not None:

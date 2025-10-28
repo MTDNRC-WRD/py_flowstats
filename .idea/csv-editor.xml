@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="\cluster\output\ts_ann_flow_index_log_mean_7day\dtw_clusters_k3.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\flow_stats\input\05014500.csv">
           <value>
             <Attribute>
