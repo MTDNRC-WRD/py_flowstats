@@ -16,9 +16,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from fontTools.unicodedata import block
 
-LOOP_MODE = True
-SITE_FILE = '40B_06000.csv'
-OUTPUT_PATH = 'timeseries_continuous'
+LOOP_MODE = False
+SITE_FILE = '06177500.csv'
+OUTPUT_PATH = 'timeseries_raw'
 
 
 def plot(path, file):
